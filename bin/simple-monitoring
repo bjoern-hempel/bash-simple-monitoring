@@ -23,7 +23,7 @@ source "$pathRoot/libs/functions"
 
 # process all configurations
 for configFile in "$pathRoot/configs/*.conf"; do
-  log "info" "Found config file $config_file"
+  log "info" "Found config file \"$configFile\""
   monitorSite $configFile
 done
 
