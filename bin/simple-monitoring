@@ -1,1 +1,29 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# Monitor all sites
+#
+# @author  Bjoern Hempel <bjoern@hempel.li>
+# @version 1.0 (2018-09-21)
+
+# some calculable configs before
+if [ -h "${BASH_SOURCE[0]}" ]; then
+    realScriptname=$(readlink "${BASH_SOURCE[0]}")
+    pathRoot=$(dirname "$realScriptname")
+    scriptname="${BASH_SOURCE[0]}"
+else
+    scriptname="$0"
+    pathRoot="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+
+# change root path
+pathRoot="$pathRoot/.."
+
+# load some sources
+source "$pathRoot/libs/functions"
+
+# process all configurations
+for configFile in "$pathRoot/configs/*.conf"; do
+  log "info" "Found config file $config_file"
+  monitorSite $configFile
+done
+

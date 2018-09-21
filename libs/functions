@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+
+# ------------
+# Log function.
+#
+# @author  Björn Hempel
+# @version 1.0
+# ------------
+log() {
+  log_text=$2
+  status="${1^^}"
+  date=`date "+%Y-%m-%d %H:%M:%S"`
+
+  if [ $status == "SUCCESS" ]; then
+    status="\033[1;32m"$status"\033[0m"
+  fi
+  if [ $status == "WARNING" ]; then
+    status="\033[1;33m"$status"\033[0m"
+  fi
+  if [ $status == "ERROR" ]; then
+    status="\033[1;31m"$status"..\033[0m"
+  fi
+  if [ $status == "INFO" ]; then
+    status="\033[1;36m"$status"...\033[0m"
+  fi
+  if [ $status == "HEADER" ]; then
+    status="\033[1;34m"$status".\033[0m"
+
+    log_text=${log_text^^}
+  fi
+
+  echo -e "[$date] [$status] $log_text"
+}
+
+# ------------
+# Monitor site function
+#
+# @author  Bjoern Hempel <bjoern@hempel.li>
+# @version 1.0 (2018-09-21)
+# ------------
+monitorSite() {
+    configFile="$1"
+
+    # check if the config file exists and is readable
+    if [ ! -f "$configFile" ]; then
+        log 'error' "Config file $configFile was not found."
+        return 1
+    fi
+    if [ ! -r "$configFile" ]; then
+        log 'error' "Config file $configFile is not readable."
+        return 1
+    fi
+
+    # set default config
+           emails=''                          # comma separated email list to send the error mails
+      checkStatus='200 OK'                    # http status code check
+     checkContent='<title>Startseite</title>' # content to check inside the body
+             site=''                          # full site path
+             user=''                          # user or empty string
+             pass=''                          # password or empty string
+         testCall=false                       # true or false
+    curlParameter=''                          # set some extra parameter to curl
+
+    # read config
+    source "$configFile"
+
+    # check variables
+    checkFailed=false
+    message=''
+    subject=''
+    head='Not checked.'
+    body='Not checked.'
+
+    # try to get the header
+    if ! $checkFailed && [ "$checkStatus" != "" ]; then
+        if [[ $user && $pass ]]; then
+            head=$(curl --insecure -s -u $user:$pass -I $curlParameter $site)
+        else
+            head=$(curl --insecure -s -I $curlParameter $site)
+        fi
+
+        headCheck=$(echo "$head" | grep -i "$checkStatus")
+
+        if [ "$headCheck" == "" ]; then
+            checkFailed=true
+            message="The \"$site\" page status check failed (\"$checkStatus\")."
+            subject="FAILED: \"$site\" page status check"
+            log 'error' 'Status check failed.'
+        else
+            log 'success' 'Status check passed.'
+        fi
+    else
+        log 'info' 'Status check ignored.'
+    fi
+
+    # try to get the body
+    if ! $checkFailed && [ "$checkContent" != "" ]; then
+        if [[ $user && $pass ]]; then
+            body=$(curl --insecure -s -u $user:$pass $curlParameter $site)
+        else
+            body=$(curl --insecure -s $curlParameter $site)
+        fi
+
+        contentCheck=$(echo "$body" | grep -i "$checkContent")
+
+        if [ "$contentCheck" == "" ]; then
+            checkFailed=true
+            message="The \"$site\" page content check failed (\"$checkContent\")."
+            subject="FAILED: \"$site\" page content check"
+            log 'error' 'Content check failed.'
+        else
+            log 'success' 'Content check passed.'
+        fi
+    else
+        log 'info' 'Content check ignored.'
+    fi
+
+    # all tests passed
+    if ! $checkFailed; then
+        log 'success' 'All checks passed.' && return 0
+    fi
+
+    # change the message during a test
+    if $testCall; then
+        subject="[TEST CALL] $subject";
+        wordTestCall='yes';
+    else
+        wordTestCall='no';
+    fi
+
+    # get the current time
+    date=`date +"%y-%m-%d %T"`;
+
+    # build the email message
+    read -r -d '' message << EOM
+checked site:    $site
+at:              $date
+checked status:  $checkStatus
+checked content: $checkContent
+test call:       $wordTestCall
+
+error message:
+
+$message
+
+full head:
+
+$head
+
+full body:
+
+$body
+
+EOM
+
+    # send emails to all given addresses
+    for email in $(echo $emails | tr "," " "); do
+        log 'info' "Send mails to $email"
+        echo "$message" | mail -a "From: monitoring@taiki.de" -s "$subject" $email
+    done
+
+    # at least one check failed
+    return 1
+}
+
