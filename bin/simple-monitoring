@@ -54,7 +54,7 @@ pathRoot="$pathRoot/.."
 source "$pathRoot/libs/functions"
 
 # process all configurations
-for configFile in "$pathRoot/configs/*.conf"; do
+for configFile in $pathRoot/configs/*.conf; do
     log "info" "Found config file \"$configFile\""
     monitorSite $configFile
 done
