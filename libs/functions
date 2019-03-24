@@ -39,6 +39,7 @@ log() {
 # ------------
 monitorSite() {
     configFile="$1"
+    counterFile=$(echo "${1/.conf/.cnt}")
 
     # check if the config file exists and is readable
     if [ ! -f "$configFile" ]; then
@@ -59,6 +60,7 @@ monitorSite() {
              pass=''                          # password or empty string
          testCall=false                       # true or false
     curlParameter=''                          # set some extra parameter to curl
+       errorDelay=0                           # error delay (Minimum number of errors up to the message)
 
     # read config
     source "$configFile"
@@ -114,10 +116,36 @@ monitorSite() {
         log 'info' 'Content check ignored.'
     fi
 
-    # all tests passed
+    # All tests passed
     if ! $checkFailed; then
+        # delete error counter file
+        if [[ -f "$counterFile" ]]; then
+            rm "$counterFile"
+        fi
+
         log 'success' 'All checks passed.' && return 0
     fi
+
+    # Read error counter
+    if [[ -f "$counterFile" ]]; then
+        counter=$(cat "$counterFile")
+    else
+        counter=0
+    fi
+
+    # Cancel message dispatch because of too few errors
+    if [[ $counter -lt $errorDelay ]]; then
+        # increment counter
+        let "counter++"
+
+        # write counter to file
+        echo $counter > "$counterFile"
+
+        log 'info' "Cancels message dispatch because of too few errors ($counter)." && return 0
+    fi
+
+    # delete counter file
+    rm "$counterFile"
 
     # change the message during a test
     if $testCall; then
